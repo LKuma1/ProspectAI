@@ -1,12 +1,53 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { z } from "zod";
+
+const RATE_LIMIT_MAX_LEADS = 50;
+const RATE_LIMIT_WINDOW_MINUTES = 60;
+
+const LeadSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  address: z.string().optional().default(""),
+  city: z.string().optional().default(""),
+  state: z.string().optional().default(""),
+  rating: z.number().optional().default(0),
+  userRatingCount: z.number().optional().default(0),
+  primaryType: z.string().optional().default(""),
+  nationalPhoneNumber: z.string().nullable().optional(),
+  websiteUri: z.string().nullable().optional(),
+  googleMapsUri: z.string().nullable().optional(),
+  digitalPainScore: z.number().min(0).max(100),
+  aiSummary: z.string(),
+});
+
+const LeadsArraySchema = z.array(LeadSchema);
 
 export async function POST(request: NextRequest) {
   try {
     const { icp, service, state, city, leadsCount = 10 } = await request.json();
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
+
+    if (user) {
+      const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MINUTES * 60 * 1000).toISOString();
+      const { data: recentSearches } = await supabase
+        .from("searches")
+        .select("leads_count")
+        .eq("user_id", user.id)
+        .gte("created_at", windowStart);
+
+      const leadsUsed = (recentSearches ?? []).reduce((sum, s) => sum + (s.leads_count ?? 0), 0);
+
+      if (leadsUsed + leadsCount > RATE_LIMIT_MAX_LEADS) {
+        const remaining = Math.max(0, RATE_LIMIT_MAX_LEADS - leadsUsed);
+        return NextResponse.json(
+          { error: `Limite de ${RATE_LIMIT_MAX_LEADS} leads por hora atingido. Você ainda pode buscar até ${remaining} leads. Tente novamente mais tarde ou reduza a quantidade.` },
+          { status: 429 }
+        );
+      }
+    }
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
     const locationStr = city ? `${city}, ${state}, Brasil` : `${state}, Brasil`;
@@ -53,26 +94,33 @@ export async function POST(request: NextRequest) {
     let text = response.text || "[]";
     text = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
-    let searchResults = [];
+    let rawJson: unknown;
     try {
-      searchResults = JSON.parse(text);
+      rawJson = JSON.parse(text);
     } catch {
       const match = text.match(/\[[\s\S]*\]/);
       if (match) {
-        searchResults = JSON.parse(match[0]);
+        rawJson = JSON.parse(match[0]);
       } else {
-        throw new Error("Invalid JSON response from Gemini");
+        throw new Error("Resposta da IA não contém JSON válido.");
       }
     }
 
+    const parsed = LeadsArraySchema.safeParse(rawJson);
+    if (!parsed.success) {
+      console.error("Zod validation error:", parsed.error.flatten());
+      throw new Error("Resposta da IA fora do formato esperado.");
+    }
+    const searchResults = parsed.data;
+
     const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
     if (chunks) {
-      chunks.forEach((chunk: any) => {
+      chunks.forEach((chunk: { maps?: { uri?: string; title?: string } }) => {
         if (chunk.maps?.uri && chunk.maps?.title) {
           const matchedResult = searchResults.find(
-            (r: any) =>
-              r.name.toLowerCase().includes(chunk.maps.title.toLowerCase()) ||
-              chunk.maps.title.toLowerCase().includes(r.name.toLowerCase())
+            (r) =>
+              r.name.toLowerCase().includes(chunk.maps!.title!.toLowerCase()) ||
+              chunk.maps!.title!.toLowerCase().includes(r.name.toLowerCase())
           );
           if (matchedResult && !matchedResult.googleMapsUri) {
             matchedResult.googleMapsUri = chunk.maps.uri;
@@ -82,7 +130,7 @@ export async function POST(request: NextRequest) {
     }
 
     searchResults.sort(
-      (a: any, b: any) => (b.digitalPainScore || 0) - (a.digitalPainScore || 0)
+      (a, b) => (b.digitalPainScore || 0) - (a.digitalPainScore || 0)
     );
 
     // Salvar no Supabase (não bloqueia a resposta se falhar)
@@ -96,7 +144,7 @@ export async function POST(request: NextRequest) {
 
         if (search?.id) {
           await supabase.from("leads").insert(
-            searchResults.map((r: any) => ({
+            searchResults.map((r) => ({
               search_id: search.id,
               user_id: user.id,
               name: r.name,
