@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
           .single();
 
         if (search?.id) {
-          await supabase.from("leads").insert(
+          await supabase.from("leads").upsert(
             searchResults.map((r) => ({
               search_id: search.id,
               user_id: user.id,
@@ -159,7 +159,8 @@ export async function POST(request: NextRequest) {
               google_maps_uri: r.googleMapsUri,
               digital_pain_score: r.digitalPainScore,
               ai_summary: r.aiSummary,
-            }))
+            })),
+            { onConflict: "user_id,name,address", ignoreDuplicates: true }
           );
         }
       } catch (saveError) {
