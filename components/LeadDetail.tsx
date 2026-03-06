@@ -16,7 +16,6 @@ import {
   ExternalLink,
 } from "lucide-react";
 import Markdown from "react-markdown";
-import { GoogleGenAI } from "@google/genai";
 
 interface LeadDetailProps {
   lead: Lead;
@@ -30,63 +29,36 @@ export function LeadDetail({ lead, searchParams, onBack }: LeadDetailProps) {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    const fetchReport = async () => {
-      try {
-        setIsLoading(true);
-        const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
-        
-        const reportPrompt = `
-          Você é um consultor de vendas B2B especialista em IA.
-          O usuário está tentando vender o seguinte serviço: "${searchParams.service}".
-          
-          Aqui estão os dados do lead (empresa):
-          Nome: ${lead.name}
-          Endereço: ${lead.address}
-          Avaliação: ${lead.rating} (${lead.userRatingCount} avaliações)
-          Website: ${lead.websiteUri ? 'Sim' : 'Não'}
-          Telefone: ${lead.nationalPhoneNumber ? 'Sim' : 'Não'}
-          Tipos: ${lead.types?.join(', ')}
-          
-          Avaliações recentes:
-          ${lead.reviews?.map((r: any) => `- ${r.rating} estrelas: "${r.text?.text}"`).join('\n') || 'Nenhuma avaliação detalhada disponível.'}
-          
-          Gere um relatório de oportunidade de vendas completo em formato Markdown (pt-BR).
-          O relatório DEVE conter as seguintes seções (use headers h2 ##):
-          
-          ## Diagnóstico Digital
-          (Analise o que está faltando ou fraco na presença online deles com base nos dados acima)
-          
-          ## Análise de Avaliações
-          (Resumo do sentimento das avaliações e reclamações comuns, se houver)
-          
-          ## Por que esta empresa precisa de IA
-          (Conecte as dores específicas deles com o serviço de IA oferecido pelo usuário)
-          
-          ## Abordagem de Vendas Sugerida
-          (Como o usuário deve abordar este lead, o que dizer na primeira mensagem/ligação)
-          
-          ## Impacto Estimado
-          (O que a IA poderia melhorar para eles em termos de negócios/faturamento/tempo)
-        `;
+  const fetchReport = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead, service: searchParams.service }),
+      });
 
-        const reportResponse = await ai.models.generateContent({
-          model: "gemini-3.1-pro-preview",
-          contents: reportPrompt,
-        });
+      const data = await response.json();
 
-        setReport(reportResponse.text || "Relatório não gerado.");
-      } catch (err: any) {
-        console.error("Report error:", err);
-        setError(
-          err.message || "Ocorreu um erro ao gerar o relatório de IA. Tente novamente.",
-        );
-      } finally {
-        setIsLoading(false);
+      if (!response.ok) {
+        throw new Error(data.error || "Erro ao gerar relatório.");
       }
-    };
 
+      setReport(data.report || "Relatório não gerado.");
+    } catch (err: any) {
+      console.error("Report error:", err);
+      setError(
+        err.message || "Ocorreu um erro ao gerar o relatório de IA. Tente novamente.",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchReport();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lead, searchParams]);
 
   const copyToClipboard = () => {
@@ -105,7 +77,7 @@ export function LeadDetail({ lead, searchParams, onBack }: LeadDetailProps) {
           onClick={onBack}
           className="text-slate-500 -ml-4"
         >
-          <ArrowLeft className="w-4 h-4 mr-2" />
+          <ArrowLeft className="w-4 h-4 mr-2" aria-hidden="true" />
           Voltar à Lista
         </Button>
         <div className="flex gap-2">
@@ -116,9 +88,9 @@ export function LeadDetail({ lead, searchParams, onBack }: LeadDetailProps) {
             className="bg-white"
           >
             {copied ? (
-              <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-500" />
+              <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-500" aria-hidden="true" />
             ) : (
-              <Copy className="w-4 h-4 mr-2" />
+              <Copy className="w-4 h-4 mr-2" aria-hidden="true" />
             )}
             {copied ? "Copiado!" : "Copiar Relatório"}
           </Button>
@@ -138,22 +110,22 @@ export function LeadDetail({ lead, searchParams, onBack }: LeadDetailProps) {
               </span>
               <span>•</span>
               <div className="flex items-center">
-                <Star className="w-4 h-4 text-amber-400 fill-amber-400 mr-1" />
+                <Star className="w-4 h-4 text-amber-400 fill-amber-400 mr-1" aria-hidden="true" />
                 <span className="font-medium text-slate-700">
                   {lead.rating || "N/A"}
                 </span>
-                <span className="ml-1">({lead.userRatingCount || 0})</span>
+                <span className="ml-1 text-slate-600">({lead.userRatingCount || 0})</span>
               </div>
             </div>
 
             <div className="space-y-4">
               <div className="flex items-start gap-3">
-                <MapPin className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
+                <MapPin className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" aria-hidden="true" />
                 <span className="text-sm text-slate-700">{lead.address}</span>
               </div>
 
               <div className="flex items-center gap-3">
-                <Phone className="w-5 h-5 text-slate-400 shrink-0" />
+                <Phone className="w-5 h-5 text-slate-400 shrink-0" aria-hidden="true" />
                 {lead.nationalPhoneNumber ? (
                   <a
                     href={`tel:${lead.nationalPhoneNumber}`}
@@ -169,7 +141,7 @@ export function LeadDetail({ lead, searchParams, onBack }: LeadDetailProps) {
               </div>
 
               <div className="flex items-center gap-3">
-                <Globe className="w-5 h-5 text-slate-400 shrink-0" />
+                <Globe className="w-5 h-5 text-slate-400 shrink-0" aria-hidden="true" />
                 {lead.websiteUri ? (
                   <a
                     href={lead.websiteUri}
@@ -195,7 +167,7 @@ export function LeadDetail({ lead, searchParams, onBack }: LeadDetailProps) {
                     className="text-sm font-medium text-blue-600 hover:underline flex items-center"
                   >
                     Abrir no Google Maps{" "}
-                    <ExternalLink className="w-3 h-3 ml-1" />
+                    <ExternalLink className="w-3 h-3 ml-1" aria-hidden="true" />
                   </a>
                 </div>
               )}
@@ -227,7 +199,7 @@ export function LeadDetail({ lead, searchParams, onBack }: LeadDetailProps) {
           <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm min-h-[600px]">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center h-full space-y-4 text-slate-500 py-20">
-                <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                <div className="w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin motion-reduce:animate-none" aria-hidden="true" />
                 <p className="font-medium animate-pulse">
                   A IA está analisando o lead e gerando o relatório
                   estratégico...
@@ -235,11 +207,11 @@ export function LeadDetail({ lead, searchParams, onBack }: LeadDetailProps) {
               </div>
             ) : error ? (
               <div className="flex flex-col items-center justify-center h-full space-y-4 text-rose-500 py-20">
-                <AlertCircle className="w-12 h-12" />
+                <AlertCircle className="w-12 h-12" aria-hidden="true" />
                 <p className="font-medium">{error}</p>
                 <Button
                   variant="outline"
-                  onClick={() => window.location.reload()}
+                  onClick={fetchReport}
                 >
                   Tentar Novamente
                 </Button>

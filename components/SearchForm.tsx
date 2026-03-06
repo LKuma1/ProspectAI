@@ -30,19 +30,22 @@ export function SearchForm({ onSearch, isLoading }: SearchFormProps) {
         <h2 className="text-2xl font-bold text-slate-900 mb-2">
           Encontre seus próximos clientes
         </h2>
-        <p className="text-slate-500">
+        <p className="text-slate-600">
           A IA do ProspectAI encontra e qualifica leads baseados no seu serviço.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-            <Target className="w-4 h-4 text-blue-500" />
+          <label htmlFor="icp" className="text-sm font-medium text-slate-700 flex items-center gap-2">
+            <Target className="w-4 h-4 text-blue-500" aria-hidden="true" />
             Descreva seu ICP (Perfil de Cliente Ideal)
           </label>
           <Textarea
+            id="icp"
             required
+            minLength={10}
+            maxLength={500}
             value={icp}
             onChange={(e) => setIcp(e.target.value)}
             placeholder="Ex: Clínicas odontológicas com 3+ anos, faturamento médio, presença digital fraca"
@@ -51,12 +54,15 @@ export function SearchForm({ onSearch, isLoading }: SearchFormProps) {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-            <Briefcase className="w-4 h-4 text-blue-500" />
+          <label htmlFor="service" className="text-sm font-medium text-slate-700 flex items-center gap-2">
+            <Briefcase className="w-4 h-4 text-blue-500" aria-hidden="true" />
             Qual serviço você oferece?
           </label>
           <Textarea
+            id="service"
             required
+            minLength={10}
+            maxLength={500}
             value={service}
             onChange={(e) => setService(e.target.value)}
             placeholder="Ex: Sistemas de IA para automação de atendimento e agendamento via WhatsApp"
@@ -66,11 +72,12 @@ export function SearchForm({ onSearch, isLoading }: SearchFormProps) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-              <MapPin className="w-4 h-4 text-blue-500" />
+            <label htmlFor="state" className="text-sm font-medium text-slate-700 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-blue-500" aria-hidden="true" />
               Estado
             </label>
             <select
+              id="state"
               value={state}
               onChange={(e) => setState(e.target.value)}
               className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
@@ -84,11 +91,13 @@ export function SearchForm({ onSearch, isLoading }: SearchFormProps) {
             </select>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700">
+            <label htmlFor="city" className="text-sm font-medium text-slate-700">
               Cidade (Opcional)
             </label>
             <Input
+              id="city"
               value={city}
+              maxLength={100}
               onChange={(e) => setCity(e.target.value)}
               placeholder="Ex: São Paulo"
             />
@@ -103,17 +112,20 @@ export function SearchForm({ onSearch, isLoading }: SearchFormProps) {
           >
             {isLoading ? (
               <span className="flex items-center gap-2">
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div
+                  className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin motion-reduce:animate-none"
+                  aria-hidden="true"
+                />
                 Buscando Leads...
               </span>
             ) : (
               <span className="flex items-center gap-2">
-                <Search className="w-5 h-5" />
+                <Search className="w-5 h-5" aria-hidden="true" />
                 Buscar Leads
               </span>
             )}
           </Button>
-          <p className="text-center text-xs text-slate-400 mt-3">
+          <p className="text-center text-xs text-slate-500 mt-3">
             Busca alimentada pelo Google Maps via Gemini AI (Gratuito)
           </p>
         </div>

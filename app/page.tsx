@@ -1,20 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SearchForm } from "@/components/SearchForm";
 import { ResultsList } from "@/components/ResultsList";
 import { LeadDetail } from "@/components/LeadDetail";
 import { Lead, SearchParams } from "@/types";
-import { Sparkles } from "lucide-react";
-import { GoogleGenAI } from "@google/genai";
+import { Sparkles, LogOut, ShieldCheck } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
+  const router = useRouter();
+  const supabase = createClient();
+
   const [step, setStep] = useState<"search" | "results" | "detail">("search");
   const [searchParams, setSearchParams] = useState<SearchParams | null>(null);
   const [results, setResults] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single()
+        .then(({ data }) => setIsAdmin(data?.role === "admin"));
+    });
+  }, [supabase]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   const handleSearch = async (params: SearchParams) => {
     setIsLoading(true);
@@ -22,82 +44,19 @@ export default function Home() {
     setSearchParams(params);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
-      const { icp, service, state, city } = params;
-      const locationStr = city ? `${city}, ${state}, Brasil` : `${state}, Brasil`;
-      
-      const prompt = `
-        Você é um especialista em prospecção B2B.
-        O usuário está procurando por leads com o seguinte Perfil de Cliente Ideal (ICP): "${icp}".
-        A localização alvo é: "${locationStr}".
-        O usuário oferece o seguinte serviço: "${service}".
-        
-        Use o Google Maps para encontrar cerca de 10 a 15 negócios reais que correspondam a este ICP nesta localização.
-        
-        Para cada negócio encontrado, forneça os seguintes dados em formato JSON estrito (uma array de objetos):
-        [
-          {
-            "id": "um identificador único gerado por você",
-            "name": "Nome do negócio",
-            "address": "Endereço completo",
-            "city": "Cidade",
-            "state": "Estado",
-            "rating": 4.5,
-            "userRatingCount": 120,
-            "primaryType": "Categoria principal",
-            "nationalPhoneNumber": "Telefone se disponível, ou null",
-            "websiteUri": "Website se disponível, ou null",
-            "googleMapsUri": "Link do Google Maps se disponível, ou null",
-            "digitalPainScore": um número de 0 a 100 (onde 100 é a maior oportunidade para vender o serviço. Dê pontos por falta de site, poucas fotos, nota baixa, poucas avaliações, sem telefone, etc),
-            "aiSummary": "Resumo de oportunidade de no máximo 3 linhas em português (pt-BR), explicando por que este negócio é um bom lead para o serviço oferecido."
-          }
-        ]
-        
-        Retorne APENAS o JSON válido, sem blocos de código markdown (\`\`\`json) e sem texto adicional.
-      `;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          tools: [{ googleMaps: {} }],
-          temperature: 0.2,
-        },
+      const response = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
       });
 
-      let text = response.text || "[]";
-      text = text.replace(/```json/g, '').replace(/```/g, '').trim();
-      
-      let searchResults = [];
-      try {
-        searchResults = JSON.parse(text);
-      } catch (e) {
-        const match = text.match(/\[[\s\S]*\]/);
-        if (match) {
-          searchResults = JSON.parse(match[0]);
-        } else {
-          throw new Error("Invalid JSON response from Gemini");
-        }
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Ocorreu um erro inesperado.");
       }
 
-      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-      if (chunks) {
-        chunks.forEach((chunk: any) => {
-          if (chunk.maps?.uri && chunk.maps?.title) {
-            const matchedResult = searchResults.find((r: any) => 
-              r.name.toLowerCase().includes(chunk.maps.title.toLowerCase()) || 
-              chunk.maps.title.toLowerCase().includes(r.name.toLowerCase())
-            );
-            if (matchedResult && !matchedResult.googleMapsUri) {
-              matchedResult.googleMapsUri = chunk.maps.uri;
-            }
-          }
-        });
-      }
-
-      searchResults.sort((a: any, b: any) => (b.digitalPainScore || 0) - (a.digitalPainScore || 0));
-
-      setResults(searchResults || []);
+      setResults(data.results || []);
       setStep("results");
     } catch (err: any) {
       console.error("Search error:", err);
@@ -137,8 +96,26 @@ export default function Home() {
             </div>
             <span className="font-bold text-xl tracking-tight">ProspectAI</span>
           </div>
-          <div className="text-sm text-slate-400 hidden sm:block">
-            Prospecção Inteligente B2B
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-400 hidden sm:block">
+              Prospecção Inteligente B2B
+            </span>
+            {isAdmin && (
+              <button
+                onClick={() => router.push("/admin")}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-white transition-colors px-2 py-1 rounded border border-slate-700 hover:border-slate-500"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Admin
+              </button>
+            )}
+            <button
+              onClick={handleLogout}
+              className="text-slate-400 hover:text-white transition-colors p-1.5 rounded hover:bg-slate-800"
+              title="Sair"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </header>
