@@ -1,9 +1,38 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+const RATE_LIMIT_MAX_REPORTS = 20;
+const RATE_LIMIT_WINDOW_MINUTES = 60;
 
 export async function POST(request: NextRequest) {
   try {
     const { lead, service } = await request.json();
+
+    // Verificar autenticação
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
+    }
+
+    // Rate limiting: máx 20 relatórios por hora por usuário
+    const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MINUTES * 60 * 1000).toISOString();
+    const { count } = await supabase
+      .from("analyze_logs")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("created_at", windowStart);
+
+    if ((count ?? 0) >= RATE_LIMIT_MAX_REPORTS) {
+      return NextResponse.json(
+        { error: `Limite de ${RATE_LIMIT_MAX_REPORTS} relatórios por hora atingido. Tente novamente mais tarde.` },
+        { status: 429 }
+      );
+    }
+
+    // Registrar uso (não bloqueia se falhar)
+    supabase.from("analyze_logs").insert({ user_id: user.id }).then(() => {});
 
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
@@ -22,7 +51,7 @@ export async function POST(request: NextRequest) {
       Avaliações recentes:
       ${
         lead.reviews
-          ?.map((r: any) => `- ${r.rating} estrelas: "${r.text?.text}"`)
+          ?.map((r: { rating: number; text?: { text: string } }) => `- ${r.rating} estrelas: "${r.text?.text}"`)
           .join("\n") || "Nenhuma avaliação detalhada disponível."
       }
 
@@ -51,11 +80,9 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ report: reportResponse.text || "Relatório não gerado." });
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro ao gerar relatório";
     console.error("Analyze API error:", error);
-    return NextResponse.json(
-      { error: error.message || "Erro ao gerar relatório" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
