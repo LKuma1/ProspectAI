@@ -43,4 +43,5 @@ export type SearchParams = {
   service: string;
   state: string;
   city: string;
+  leadsCount: number;
 };

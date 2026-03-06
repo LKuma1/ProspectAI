@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export async function POST(request: NextRequest) {
   try {
-    const { icp, service, state, city } = await request.json();
+    const { icp, service, state, city, leadsCount = 10 } = await request.json();
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       A localização alvo é: "${locationStr}".
       O usuário oferece o seguinte serviço: "${service}".
 
-      Use o Google Maps para encontrar cerca de 10 a 15 negócios reais que correspondam a este ICP nesta localização.
+      Use o Google Maps para encontrar exatamente ${leadsCount} negócios reais que correspondam a este ICP nesta localização.
 
       Para cada negócio encontrado, forneça os seguintes dados em formato JSON estrito (uma array de objetos):
       [

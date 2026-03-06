@@ -6,7 +6,7 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
 import { SearchParams } from "@/types";
-import { Search, MapPin, Target, Briefcase } from "lucide-react";
+import { Search, MapPin, Target, Briefcase, Hash } from "lucide-react";
 
 interface SearchFormProps {
   onSearch: (params: SearchParams) => void;
@@ -18,10 +18,11 @@ export function SearchForm({ onSearch, isLoading }: SearchFormProps) {
   const [service, setService] = useState("");
   const [state, setState] = useState("SP");
   const [city, setCity] = useState("");
+  const [leadsCount, setLeadsCount] = useState(10);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    onSearch({ icp, service, state, city });
+    onSearch({ icp, service, state, city, leadsCount });
   };
 
   return (
@@ -102,6 +103,23 @@ export function SearchForm({ onSearch, isLoading }: SearchFormProps) {
               placeholder="Ex: São Paulo"
             />
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="leadsCount" className="text-sm font-medium text-slate-700 flex items-center gap-2">
+            <Hash className="w-4 h-4 text-blue-500" aria-hidden="true" />
+            Quantidade de leads
+          </label>
+          <select
+            id="leadsCount"
+            value={leadsCount}
+            onChange={(e) => setLeadsCount(Number(e.target.value))}
+            className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2"
+          >
+            {[5, 10, 15, 20, 25].map((n) => (
+              <option key={n} value={n}>{n} leads</option>
+            ))}
+          </select>
         </div>
 
         <div className="pt-4">
